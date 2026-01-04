@@ -1,0 +1,44 @@
+system:
+  db-type: "mysql"
+  addr: 8988
+  iplimit-count: 10000
+  iplimit-time: 3600
+  use-multipoint: false
+  use-redis: false
+  use-mongo: false
+  use-strict-auth: false
+  disable-auto-migrate: true
+
+mysql:
+  path: "localhost"
+  port: "3306"
+  username: "test"
+  password: "123456"
+  db-name: "tinode"
+  config: "charset=utf8mb4&parseTime=True&loc=Local"
+  max-idle-conns: 10
+  max-open-conns: 100
+  log-mode: "info"
+  log-zap: false
+
+zap:
+  level: "info"
+  format: "console"
+  output-path: "log/starlive.log"
+  rotate-by-date: true  # 是否开启按日期分割日志文件
+  max-size: 100      # 单个日志文件最大大小(MB)
+  max-backups: 3      # 保留的旧日志文件数量
+  max-age: 28         # 保留日志文件的最大天数
+  compress: true
+  show-line: true
+  log-in-console: true
+
+jwt:
+  secret-key: "123456"
+  signing-method: "RS256"
+  access-token-expire: 600
+  refresh-token-expire: 86400
+  issuer: "http://127.0.0.1"
+  # RSA密钥配置 (用于RS256/RS384/RS512)
+  private-key-path: ""
+  public-key-path: "./casdoor_public_key.pem"
