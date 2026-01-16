@@ -1,7 +1,7 @@
 system:
   db-type: "mysql"
   addr: 8989
-  disable-auto-migrate: true
+  disable-auto-migrate: false
 
 mysql:
   host: "localhost"
@@ -13,8 +13,7 @@ mysql:
   max-idle-conns: 10
   max-open-conns: 100
   # silent: 不输出任何日志 error: 只输出错误日志 info: 输出错误和信息日志 debug: 输出所有日志
-  log-mode: "error"
-  # true 写入日志文件
+  log-mode: "silent"
   log-zap: false
 
 zap:
@@ -30,7 +29,6 @@ zap:
 
 jwt:
   signing-method: "HS512"
-  # 单位分钟
   access-token-expire: 1
   refresh-token-expire: 86400
   # issuer 签发域名确保令牌的安全性

@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"mygoframe/internal/models"
@@ -15,6 +16,13 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+var (
+	dbInstance *gorm.DB
+	once       sync.Once
+	initErr    error
+)
+
+// InitDB 初始化数据库连接
 func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 
@@ -76,12 +84,33 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(cfg.MySQL.MaxOpenConns)
 
 	if !cfg.System.DisableAutoMigrate {
-		if err := db.AutoMigrate(&models.News{}); err != nil {
+		if err := db.AutoMigrate(&models.News{}, &models.User{}); err != nil {
 			return nil, fmt.Errorf("数据库迁移失败: %v", err)
 		}
 	}
 
 	return db, nil
+}
+
+// GetDB 获取数据库实例（单例模式）
+func GetDB() *gorm.DB {
+	if dbInstance == nil {
+		panic("数据库未初始化，请先调用 InitDB")
+	}
+	return dbInstance
+}
+
+// SetDB 设置数据库实例（用于测试）
+func SetDB(db *gorm.DB) {
+	dbInstance = db
+}
+
+// InitDBWithSingleton 初始化数据库并设置为全局单例
+func InitDBWithSingleton(cfg *config.Config) error {
+	once.Do(func() {
+		dbInstance, initErr = InitDB(cfg)
+	})
+	return initErr
 }
 
 func getLogLevel(cfg *config.Config) gormlogger.LogLevel {

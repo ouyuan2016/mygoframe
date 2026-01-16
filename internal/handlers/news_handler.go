@@ -3,17 +3,21 @@ package handlers
 import (
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"mygoframe/internal/services"
 	"mygoframe/pkg/utils"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type NewsHandler struct {
 	service services.NewsService
 }
 
-func NewNewsHandler(service services.NewsService) *NewsHandler {
-	return &NewsHandler{service: service}
+func NewNewsHandler(db *gorm.DB) *NewsHandler {
+	return &NewsHandler{
+		service: services.NewNewsService(db),
+	}
 }
 
 func (h *NewsHandler) GetNewsByID(c *gin.Context) {

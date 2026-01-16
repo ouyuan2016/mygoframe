@@ -19,7 +19,3 @@ func (w *Writer) Printf(format string, args ...interface{}) {
 		fmt.Fprintf(os.Stdout, format+"\n", args...)
 	}
 }
-
-func NewWriter(cfg *config.Config) *Writer {
-	return &Writer{cfg: cfg}
-}

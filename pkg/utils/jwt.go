@@ -22,11 +22,11 @@ var (
 )
 
 type UserInfo struct {
-	Id          string `xorm:"varchar(100) index" json:"id"`
-	DisplayName string `xorm:"varchar(100)" json:"displayName"`
-	Avatar      string `xorm:"varchar(500)" json:"avatar"`
-	Email       string `xorm:"varchar(100) index" json:"email"`
-	Phone       string `xorm:"varchar(100) index" json:"phone"`
+	Id          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	Avatar      string `json:"avatar"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
 }
 
 type Claims struct {
@@ -85,12 +85,6 @@ func GetJWTUtil() (*JWTUtil, error) {
 }
 
 func (j *JWTUtil) GenerateToken(userInfo UserInfo) (string, error) {
-	if userInfo.Id == "" {
-		return "", errors.New("用户ID不能为空")
-	}
-	if userInfo.DisplayName == "" {
-		return "", errors.New("显示名称不能为空")
-	}
 	if userInfo.Email == "" {
 		return "", errors.New("邮箱不能为空")
 	}
@@ -99,7 +93,8 @@ func (j *JWTUtil) GenerateToken(userInfo UserInfo) (string, error) {
 		return "", errors.New("访问令牌过期时间必须大于0")
 	}
 
-	expireTime := time.Now().Add(time.Duration(j.config.AccessTokenExpire) * time.Second)
+	// 将分钟转换为秒
+	expireTime := time.Now().Add(time.Duration(j.config.AccessTokenExpire) * time.Minute)
 
 	claims := Claims{
 		UserInfo: &userInfo,

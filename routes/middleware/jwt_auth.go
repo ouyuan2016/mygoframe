@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"mygoframe/pkg/logger"
 	"mygoframe/pkg/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 // JWTAuth JWT认证中间件
@@ -14,7 +16,7 @@ func JWTAuth() gin.HandlerFunc {
 		// 获取Authorization头
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			utils.Unauthorized(c, "Access token not provided")
+			utils.Unauthorized(c, "Unauthorized")
 			c.Abort()
 			return
 		}
@@ -22,7 +24,7 @@ func JWTAuth() gin.HandlerFunc {
 		// 检查Bearer格式
 		parts := strings.SplitN(authHeader, " ", 2)
 		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			utils.Unauthorized(c, "Invalid access token format")
+			utils.Unauthorized(c, "Invalid Token")
 			c.Abort()
 			return
 		}
@@ -37,10 +39,10 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		// 解析令牌
+		fmt.Println(parts[1])
 		claims, err := jwtUtil.ParseToken(parts[1])
 		if err != nil {
-			logger.Warn("令牌解析失败", logger.Err(err))
-			utils.Unauthorized(c, "Access token is invalid or expired")
+			utils.Unauthorized(c, "Access token is invalid or expired: "+err.Error())
 			c.Abort()
 			return
 		}
@@ -53,7 +55,7 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		// 将用户信息存储到上下文
-		//c.Set("user_id", claims.UserInfo.Id)
+		c.Set("user", claims.UserInfo)
 		//c.Set("display_name", claims.UserInfo.DisplayName)
 		//c.Set("avatar", claims.UserInfo.Avatar)
 		//c.Set("email", claims.UserInfo.Email)

@@ -1,11 +1,11 @@
 package routes
 
 import (
+	"mygoframe/pkg/config"
+	"mygoframe/routes/middleware"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"mygoframe/pkg/config"
-	"mygoframe/pkg/logger"
-	"mygoframe/routes/middleware"
 )
 
 func SetupRoutes(db *gorm.DB) *gin.Engine {
@@ -14,9 +14,9 @@ func SetupRoutes(db *gorm.DB) *gin.Engine {
 	}
 
 	r := gin.New()
-	r.Use(logger.GinLogger())
+	r.Use(middleware.Logger()) // 请求日志
 	r.Use(middleware.Cors())
-	r.Use(gin.Recovery())
+	r.Use(middleware.Recovery())
 
 	apiGroup := r.Group("/api")
 	{
@@ -25,10 +25,11 @@ func SetupRoutes(db *gorm.DB) *gin.Engine {
 		})
 
 		InitNewsRoutes(apiGroup, db)
+		SetupUserRoutes(apiGroup, db)
 	}
 
 	r.NoRoute(func(c *gin.Context) {
-		c.JSON(404, gin.H{"code": 404, "message": "Not Found"})
+		c.JSON(404, gin.H{"code": 404, "message": "Not Found", "data": nil})
 	})
 
 	return r
