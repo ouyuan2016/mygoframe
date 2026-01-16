@@ -1,20 +1,14 @@
 system:
   db-type: "mysql"
   addr: 8989
-  iplimit-count: 10000
-  iplimit-time: 3600
-  use-multipoint: false
-  use-redis: false
-  use-mongo: false
-  use-strict-auth: false
   disable-auto-migrate: false
 
 mysql:
-  path: "localhost"
+  host: "localhost"
   port: "3306"
-  username: "test"
+  username: "root"
   password: "123456"
-  db-name: "tinode"
+  db-name: "testdb"
   config: "charset=utf8mb4&parseTime=True&loc=Local"
   max-idle-conns: 10
   max-open-conns: 100
@@ -30,16 +24,16 @@ zap:
   max-backups: 3      # 保留的旧日志文件数量
   max-age: 28         # 保留日志文件的最大天数
   compress: true
-  show-line: true
   log-in-console: true
 
 jwt:
-  # secret-key用于HS256/HS384/HS512签名方法
-  secret-key: "123456"
   signing-method: "RS256"
   access-token-expire: 600
   refresh-token-expire: 86400
+  # issuer 签发域名确保令牌的安全性
   issuer: "http://127.0.0.1"
+  # secret-key用于HS256/HS384/HS512签名方法 32位长度
+  secret-key: "12345678901234567890123456789012"
   # RSA密钥配置 (用于RS256/RS384/RS512)
   private-key-path: ""
   public-key-path: "./casdoor_public_key.pem"

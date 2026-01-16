@@ -1,50 +1,52 @@
 package services
 
 import (
-	"github.com/ouyuan2016/mygoframe/internal/models"
-	"github.com/ouyuan2016/mygoframe/internal/repositories"
+	"context"
+	"errors"
+
+	"mygoframe/internal/models"
+	"mygoframe/internal/repositories"
 )
 
-// NewsService 快讯服务接口
 type NewsService interface {
-	GetNewsByID(id uint) (*models.News, error)
-	GetNewsList(category int, isImportant bool, page, pageSize int) ([]models.News, int64, error)
+	GetNewsByID(ctx context.Context, id uint) (*models.News, error)
+	GetNewsList(ctx context.Context, page, pageSize int) ([]*models.News, int64, error)
 }
 
-// newsService 快讯服务实现
 type newsService struct {
-	newsRepo repositories.NewsRepository
+	repo repositories.NewsRepository
 }
 
-// NewNewsService 创建快讯服务实例
-func NewNewsService(newsRepo repositories.NewsRepository) NewsService {
-	return &newsService{newsRepo: newsRepo}
+func NewNewsService(repo repositories.NewsRepository) NewsService {
+	return &newsService{repo: repo}
 }
 
-// GetNewsByID 根据ID获取快讯
-func (s *newsService) GetNewsByID(id uint) (*models.News, error) {
-	return s.newsRepo.GetByID(id)
+func (s *newsService) GetNewsByID(ctx context.Context, id uint) (*models.News, error) {
+	news, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, errors.New("快讯不存在")
+	}
+	return news, nil
 }
 
-// GetNewsList 获取快讯列表
-func (s *newsService) GetNewsList(category int, isImportant bool, page, pageSize int) ([]models.News, int64, error) {
-	if page <= 0 {
+func (s *newsService) GetNewsList(ctx context.Context, page, pageSize int) ([]*models.News, int64, error) {
+	if page < 1 {
 		page = 1
 	}
-	if pageSize <= 0 {
+	if pageSize < 1 {
 		pageSize = 10
 	}
 
+	total, err := s.repo.Count()
+	if err != nil {
+		return nil, 0, err
+	}
+
 	offset := (page - 1) * pageSize
-	newsList, err := s.newsRepo.List(category, isImportant, offset, pageSize)
+	list, err := s.repo.List(offset, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	count, err := s.newsRepo.Count(category, isImportant)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return newsList, count, nil
+	return list, total, nil
 }

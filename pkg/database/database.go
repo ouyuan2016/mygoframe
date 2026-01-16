@@ -2,102 +2,97 @@ package database
 
 import (
 	"fmt"
-	"log"
 	"time"
 
-	"github.com/ouyuan2016/mygoframe/internal/models"
-	"github.com/ouyuan2016/mygoframe/pkg/config"
+	"mygoframe/internal/models"
+	"mygoframe/pkg/config"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
 
-var DB *gorm.DB
-
-// InitDB 初始化数据库连接
-func InitDB(cfg *config.Config) error {
-	dbConfig := cfg.GetDatabaseConfig()
-	var dsn string
-	var err error
+func InitDB(cfg *config.Config) (*gorm.DB, error) {
+	var dialector gorm.Dialector
 
 	switch cfg.System.DbType {
 	case "mysql":
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?%s",
-			dbConfig.Username, dbConfig.Password, dbConfig.Path, dbConfig.Port, dbConfig.DbName, dbConfig.Config)
-		DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-			Logger: logger.New(NewWriter(dbConfig), logger.Config{
-				SlowThreshold: 200 * time.Millisecond,
-				LogLevel:      dbConfig.LevelLog(),
-				Colorful:      true,
-			}),
-			NamingStrategy: schema.NamingStrategy{
-				TablePrefix:   dbConfig.Prefix,
-				SingularTable: dbConfig.Singular,
-			},
-			DisableForeignKeyConstraintWhenMigrating: true,
-		})
-	case "postgres", "pgsql":
-		dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Shanghai",
-			dbConfig.Path, dbConfig.Username, dbConfig.Password, dbConfig.DbName, dbConfig.Port)
-		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger: logger.New(NewWriter(dbConfig), logger.Config{
-				SlowThreshold: 200 * time.Millisecond,
-				LogLevel:      dbConfig.LevelLog(),
-				Colorful:      true,
-			}),
-			NamingStrategy: schema.NamingStrategy{
-				TablePrefix:   dbConfig.Prefix,
-				SingularTable: dbConfig.Singular,
-			},
-			DisableForeignKeyConstraintWhenMigrating: true,
-		})
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?%s",
+			cfg.MySQL.Username,
+			cfg.MySQL.Password,
+			cfg.MySQL.Host,
+			cfg.MySQL.Port,
+			cfg.MySQL.DbName,
+			cfg.MySQL.Config,
+		)
+		dialector = mysql.Open(dsn)
+	case "postgres":
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+			cfg.Postgres.Host,
+			cfg.Postgres.Username,
+			cfg.Postgres.Password,
+			cfg.Postgres.DbName,
+			cfg.Postgres.Port,
+		)
+		dialector = postgres.Open(dsn)
 	case "sqlite":
-		dsn = dbConfig.Path
-		if dsn == "" {
-			dsn = dbConfig.DbName
-		}
-		DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
-			Logger: logger.New(NewWriter(dbConfig), logger.Config{
-				SlowThreshold: 200 * time.Millisecond,
-				LogLevel:      dbConfig.LevelLog(),
-				Colorful:      true,
-			}),
-			NamingStrategy: schema.NamingStrategy{
-				TablePrefix:   dbConfig.Prefix,
-				SingularTable: dbConfig.Singular,
-			},
-			DisableForeignKeyConstraintWhenMigrating: true,
-		})
+		dialector = sqlite.Open(cfg.SQLite.Host)
 	default:
-		return fmt.Errorf("unsupported database type: %s", cfg.System.DbType)
+		return nil, fmt.Errorf("不支持的数据库类型: %s", cfg.System.DbType)
 	}
 
+	gormConfig := &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+	}
+
+	if cfg.System.DbType != "sqlite" {
+		gormConfig.Logger = gormlogger.New(
+			&Writer{cfg: cfg},
+			gormlogger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  getLogLevel(cfg),
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  true,
+			},
+		)
+	}
+
+	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("数据库连接失败: %v", err)
 	}
 
-	// 设置连接池
-	sqlDB, err := DB.DB()
+	sqlDB, err := db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+		return nil, fmt.Errorf("获取数据库实例失败: %v", err)
 	}
 
-	sqlDB.SetMaxIdleConns(dbConfig.MaxIdleConns)
-	sqlDB.SetMaxOpenConns(dbConfig.MaxOpenConns)
-	// 自动迁移数据库
+	sqlDB.SetMaxIdleConns(cfg.MySQL.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MySQL.MaxOpenConns)
+
 	if !cfg.System.DisableAutoMigrate {
-		log.Println("开始自动迁移数据库...")
-		if err := DB.AutoMigrate(
-			&models.News{},
-		); err != nil {
-			return fmt.Errorf("failed to auto migrate database: %w", err)
+		if err := db.AutoMigrate(&models.News{}); err != nil {
+			return nil, fmt.Errorf("数据库迁移失败: %v", err)
 		}
-		log.Println("数据库自动迁移完成")
 	}
 
-	log.Printf("数据库连接成功, 类型: %s", cfg.System.DbType)
-	return nil
+	return db, nil
+}
+
+func getLogLevel(cfg *config.Config) gormlogger.LogLevel {
+	switch cfg.MySQL.LogMode {
+	case "silent":
+		return gormlogger.Silent
+	case "error":
+		return gormlogger.Error
+	case "warn":
+		return gormlogger.Warn
+	default:
+		return gormlogger.Info
+	}
 }

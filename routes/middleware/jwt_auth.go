@@ -3,9 +3,9 @@ package middleware
 import (
 	"strings"
 
-	"github.com/ouyuan2016/mygoframe/pkg/logger"
-	"github.com/ouyuan2016/mygoframe/pkg/utils"
 	"github.com/gin-gonic/gin"
+	"mygoframe/pkg/logger"
+	"mygoframe/pkg/utils"
 )
 
 // JWTAuth JWT认证中间件

@@ -3,65 +3,56 @@ package handlers
 import (
 	"strconv"
 
-	"github.com/ouyuan2016/mygoframe/pkg/utils"
 	"github.com/gin-gonic/gin"
-
-	"github.com/ouyuan2016/mygoframe/internal/services"
+	"mygoframe/internal/services"
+	"mygoframe/pkg/utils"
 )
 
-// NewsHandler 快讯处理器
 type NewsHandler struct {
-	newsService services.NewsService
+	service services.NewsService
 }
 
-// NewNewsHandler 创建快讯处理器实例
-func NewNewsHandler(newsService services.NewsService) *NewsHandler {
-	return &NewsHandler{newsService: newsService}
+func NewNewsHandler(service services.NewsService) *NewsHandler {
+	return &NewsHandler{service: service}
 }
 
-// GetNewsByID 根据ID获取快讯
 func (h *NewsHandler) GetNewsByID(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		utils.BadRequest(c, "Invalid news ID")
+		utils.BadRequest(c, "无效ID")
 		return
 	}
 
-	news, err := h.newsService.GetNewsByID(uint(id))
+	news, err := h.service.GetNewsByID(c, uint(id))
 	if err != nil {
-		utils.NotFound(c, "News not found")
+		utils.NotFound(c, "快讯不存在")
 		return
 	}
 
 	utils.Success(c, news)
 }
 
-// GetNewsList 获取快讯列表
 func (h *NewsHandler) GetNewsList(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	category, _ := strconv.Atoi(c.DefaultQuery("category", "1"))
-	isImportantStr := c.Query("is_important")
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
 
-	var isImportant bool
-	if isImportantStr != "" {
-		b, err := strconv.ParseBool(isImportantStr)
-		if err != nil {
-			utils.BadRequest(c, "Invalid is_important parameter")
-			return
-		}
-		isImportant = b
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
 	}
 
-	newsList, total, err := h.newsService.GetNewsList(category, isImportant, page, pageSize)
+	news, total, err := h.service.GetNewsList(c, page, pageSize)
 	if err != nil {
-		utils.ServerError(c, "Failed to retrieve news list")
+		utils.ServerError(c, "获取快讯列表失败")
 		return
 	}
 
 	utils.Success(c, gin.H{
-		"news_list": newsList,
-		"total":     total,
+		"list":     news,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
 	})
 }

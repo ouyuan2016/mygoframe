@@ -1,4 +1,4 @@
-module github.com/ouyuan2016/mygoframe
+module mygoframe
 
 go 1.25.0
 
