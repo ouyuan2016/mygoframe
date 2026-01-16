@@ -22,6 +22,7 @@ zap:
   format: "console"
   output-path: "log/starlive.log"
   rotate-by-date: true  # 是否开启按日期分割日志文件
+  level-separation: true # 按级别分离日志文件（info.log, error.log等）
   max-size: 100      # 单个日志文件最大大小(MB)
   max-backups: 30      # 保留的旧日志文件数量
   max-age: 28         # 保留日志文件的最大天数

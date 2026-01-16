@@ -51,15 +51,16 @@ func (d *Database) LevelLog() logger.LogLevel {
 }
 
 type Zap struct {
-	Level        string `mapstructure:"level"`
-	Format       string `mapstructure:"format"`
-	OutputPath   string `mapstructure:"output-path"`
-	MaxSize      int    `mapstructure:"max-size"`
-	MaxBackups   int    `mapstructure:"max-backups"`
-	MaxAge       int    `mapstructure:"max-age"`
-	Compress     bool   `mapstructure:"compress"`
-	RotateByDate bool   `mapstructure:"rotate-by-date"`
-	LogInConsole bool   `mapstructure:"log-in-console"`
+	Level           string `mapstructure:"level"`
+	Format          string `mapstructure:"format"`
+	OutputPath      string `mapstructure:"output-path"`
+	MaxSize         int    `mapstructure:"max-size"`
+	MaxBackups      int    `mapstructure:"max-backups"`
+	MaxAge          int    `mapstructure:"max-age"`
+	Compress        bool   `mapstructure:"compress"`
+	RotateByDate    bool   `mapstructure:"rotate-by-date"`
+	LogInConsole    bool   `mapstructure:"log-in-console"`
+	LevelSeparation bool   `mapstructure:"level-separation"` // 按级别分离日志文件
 }
 
 type JWT struct {
