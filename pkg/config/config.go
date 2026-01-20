@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -18,6 +19,7 @@ type Config struct {
 	JWT        JWT        `mapstructure:"jwt"`
 	Redis      Redis      `mapstructure:"redis"`       // 新增 Redis 配置
 	LocalCache LocalCache `mapstructure:"local-cache"` // 本地缓存配置
+	Queue      Queue      `mapstructure:"queue"`       // 队列配置
 }
 
 type System struct {
@@ -91,10 +93,25 @@ type Redis struct {
 	Prefix       string `mapstructure:"prefix"` // Redis缓存前缀
 }
 
+// GetAddr 获取Redis地址
+func (r *Redis) GetAddr() string {
+	return fmt.Sprintf("%s:%s", r.Host, r.Port)
+}
+
 // LocalCache 本地缓存配置
 type LocalCache struct {
 	MaxCost int64 `mapstructure:"max-cost"` // 本地缓存最大容量(字节)
 	MaxKeys int64 `mapstructure:"max-keys"` // 本地缓存最大key数量
+}
+
+// Queue 队列配置
+type Queue struct {
+	Enabled     bool           `mapstructure:"enabled"`     // 是否启用队列服务
+	Concurrency int            `mapstructure:"concurrency"` // 并发工作线程数
+	Queues      map[string]int `mapstructure:"queues"`      // 队列优先级配置
+	MaxRetry    int            `mapstructure:"max-retry"`   // 最大重试次数
+	Timeout     int            `mapstructure:"timeout"`     // 任务超时时间（秒）
+	Retention   int            `mapstructure:"retention"`   // 任务保留时间（秒）
 }
 
 func GetBuildMode() string {

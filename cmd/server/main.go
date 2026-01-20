@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"mygoframe/internal/task"
 	"mygoframe/pkg/cache"
 	"mygoframe/pkg/config"
 	"mygoframe/pkg/database"
 	"mygoframe/pkg/logger"
+	"mygoframe/pkg/queue"
 	"mygoframe/routes"
 
 	"go.uber.org/zap"
@@ -40,6 +42,32 @@ func Run() {
 		log.Fatalf("初始化数据库失败: %v", err)
 	}
 
+	// 初始化队列
+	if cfg.Queue.Enabled {
+		queue.InitQueue()
+		queue.InitQueueServer()
+		task.Setup() // 设置和注册所有任务
+
+		// 注册处理器到Mux
+		for pattern, handler := range queue.HandleFunc {
+			h := handler
+			queue.Mux.HandleFunc(pattern, h)
+		}
+
+		go func() {
+			log.Println("队列服务器启动")
+			if err := queue.Server.Run(queue.Mux); err != nil {
+				log.Fatalf("队列服务器启动失败: %v", err)
+			}
+		}()
+		go func() {
+			log.Println("定时任务调度器启动")
+			if err := queue.Scheduler.Run(); err != nil {
+				log.Fatalf("定时任务调度器启动失败: %v", err)
+			}
+		}()
+	}
+
 	r := routes.SetupRoutes(db)
 
 	srv := &http.Server{
@@ -59,6 +87,13 @@ func Run() {
 	<-quit
 
 	log.Println("正在关闭服务器...")
+
+	if cfg.Queue.Enabled {
+		queue.StopScheduler()
+		log.Println("定时任务调度器已关闭")
+		queue.Server.Shutdown()
+		log.Println("队列服务器已关闭")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

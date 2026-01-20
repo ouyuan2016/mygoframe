@@ -1,13 +1,18 @@
 package handlers
 
 import (
+	"fmt"
 	"strings"
 
 	"mygoframe/internal/dto"
 	"mygoframe/internal/services"
+	"mygoframe/internal/task"
+	"mygoframe/pkg/queue"
 	"mygoframe/pkg/utils"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 )
 
@@ -21,6 +26,54 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 	return &UserHandler{
 		userService: services.NewUserService(db),
 	}
+}
+
+// TestQueue 测试队列
+func (h *UserHandler) TestQueue(c *gin.Context) {
+	// 从查询参数获取队列名称，默认为 "default"  default 队列权重为 3 ，critical 队列权重为 6 low 队列权重为 1
+	queueName := c.DefaultQuery("queue", "default")
+
+	// 模拟一个用户ID
+	userID := 123
+	// 创建一个新任务
+	t, err := task.NewWelcomeEmailTask(userID)
+	if err != nil {
+		utils.ServerError(c, "创建任务失败: "+err.Error())
+		return
+	}
+	// 入队时指定队列
+	info, err := queue.Client.Enqueue(t, asynq.MaxRetry(3), asynq.Timeout(20*time.Minute), asynq.Queue(queueName))
+	if err != nil {
+		utils.ServerError(c, "入队失败: "+err.Error())
+		return
+	}
+	utils.Success(c, gin.H{
+		"task_id": info.ID,
+		"queue":   queueName,
+	})
+}
+
+// EnqueueDelayedTask 测试延迟队列
+func (h *UserHandler) EnqueueDelayedTask(c *gin.Context) {
+	// 模拟一个用户ID
+	userID := "123"
+	t, err := task.NewSendLaterEmailTask(userID, time.Now().Add(3*time.Second))
+	if err != nil {
+		utils.ServerError(c, "创建任务失败: "+err.Error())
+		return
+	}
+	fmt.Println("start time:", time.Now().Format("2006-01-02 15:04:05"))
+	// Enqueue the task to be processed after the specified delay.
+	info, err := queue.Client.Enqueue(t, asynq.ProcessIn(3*time.Second))
+	if err != nil {
+		utils.ServerError(c, "入队失败: "+err.Error())
+		return
+	}
+
+	utils.Success(c, gin.H{
+		"task_id":    info.ID,
+		"process_in": "3s",
+	})
 }
 
 // Register 用户注册

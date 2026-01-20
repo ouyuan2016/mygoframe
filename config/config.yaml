@@ -37,6 +37,18 @@ redis:
   write-timeout: 3  # 写入超时时间(秒)
   prefix: "app:"    # Redis缓存前缀
 
+# 队列配置
+queue:
+  enabled: true         # 是否启用队列服务
+  concurrency: 10         # 并发工作线程数
+  queues:               # 队列优先级配置
+    critical: 6         # 高优先级队列权重
+    default: 3          # 默认队列权重
+    low: 1              # 低优先级队列权重
+  max-retry: 3          # 最大重试次数
+  timeout: 30           # 任务超时时间（秒）
+  retention: 86400      # 任务保留时间（秒，24小时）
+
 # zap日志配置
 zap:
   level: "info"
