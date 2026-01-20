@@ -15,47 +15,49 @@ import (
 )
 
 var Logger *zap.Logger
-var once sync.Once
-var initErr error
 
-// DateWriter 按日期写入器
-type DateWriter struct {
-	basePath    string
-	currentDate string
-	file        *os.File
-	mu          sync.Mutex
+// FileWriter 通用的文件写入器，支持按日期分割和按级别分离
+type FileWriter struct {
+	basePath        string
+	currentDate     string
+	level           string
+	file            *os.File
+	rotateByDate    bool
+	levelSeparation bool
+	mu              sync.Mutex
 }
 
-func NewDateWriter(basePath string) *DateWriter {
-	return &DateWriter{
-		basePath: basePath,
+func NewFileWriter(basePath string, level string, rotateByDate bool, levelSeparation bool) *FileWriter {
+	return &FileWriter{
+		basePath:        basePath,
+		level:           level,
+		rotateByDate:    rotateByDate,
+		levelSeparation: levelSeparation,
 	}
 }
 
-func (w *DateWriter) Write(p []byte) (n int, err error) {
+func (w *FileWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
 
-	if dateStr != w.currentDate {
+	// 检查是否需要重新打开文件（日期变化或文件未打开）
+	if dateStr != w.currentDate || w.file == nil {
 		if w.file != nil {
 			w.file.Close()
 		}
 
-		dir := filepath.Dir(w.basePath)
+		fileName := w.getFileName(dateStr)
+		dir := filepath.Dir(fileName)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return 0, fmt.Errorf("failed to create log directory: %v", err)
 		}
 
-		ext := filepath.Ext(w.basePath)
-		base := w.basePath[:len(w.basePath)-len(ext)]
-		fileName := fmt.Sprintf("%s-%s%s", base, dateStr, ext)
-
 		w.file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			return 0, fmt.Errorf("failed to open log file: %v", err)
+			return 0, fmt.Errorf("failed to open log file %s: %v", fileName, err)
 		}
 
 		w.currentDate = dateStr
@@ -64,7 +66,30 @@ func (w *DateWriter) Write(p []byte) (n int, err error) {
 	return w.file.Write(p)
 }
 
-func (w *DateWriter) Close() error {
+func (w *FileWriter) getFileName(dateStr string) string {
+	if !w.rotateByDate && !w.levelSeparation {
+		// 既不按日期也不按级别分离，使用原始路径
+		return w.basePath
+	}
+
+	if w.levelSeparation {
+		// 按级别分离日志文件
+		if w.rotateByDate {
+			// 按日期和级别分离：log/2026-01-20/info.log
+			return filepath.Join(filepath.Dir(w.basePath), dateStr, w.level+".log")
+		} else {
+			// 只按级别分离：log/info.log
+			return filepath.Join(filepath.Dir(w.basePath), w.level+".log")
+		}
+	} else {
+		// 只按日期分离：log/starlive-2026-01-20.log
+		ext := filepath.Ext(w.basePath)
+		base := w.basePath[:len(w.basePath)-len(ext)]
+		return fmt.Sprintf("%s-%s%s", base, dateStr, ext)
+	}
+}
+
+func (w *FileWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -74,94 +99,26 @@ func (w *DateWriter) Close() error {
 	return nil
 }
 
-// LevelWriter 按级别写入不同文件的写入器
-type LevelWriter struct {
-	baseDir     string
-	currentDate string
-	writers     map[string]*os.File
-	mu          sync.Mutex
-}
-
-func NewLevelWriter(baseDir string) *LevelWriter {
-	return &LevelWriter{
-		baseDir: baseDir,
-		writers: make(map[string]*os.File),
-	}
-}
-
-func (w *LevelWriter) Write(level string, p []byte) (n int, err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	now := time.Now()
-	dateStr := now.Format("2006-01-02")
-
-	// 如果日期变化，关闭所有旧文件
-	if dateStr != w.currentDate {
-		for _, file := range w.writers {
-			if file != nil {
-				file.Close()
-			}
-		}
-		w.writers = make(map[string]*os.File)
-		w.currentDate = dateStr
-	}
-
-	// 获取或创建对应级别的文件
-	writer, exists := w.writers[level]
-	if !exists {
-		// 创建日期目录
-		dateDir := filepath.Join(w.baseDir, dateStr)
-		if err := os.MkdirAll(dateDir, 0755); err != nil {
-			return 0, fmt.Errorf("failed to create log directory %s: %v", dateDir, err)
-		}
-
-		// 创建级别文件
-		fileName := filepath.Join(dateDir, level+".log")
-		writer, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			return 0, fmt.Errorf("failed to open log file %s: %v", fileName, err)
-		}
-		w.writers[level] = writer
-	}
-
-	return writer.Write(p)
-}
-
-func (w *LevelWriter) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	for _, file := range w.writers {
-		if file != nil {
-			file.Close()
-		}
-	}
-	return nil
-}
-
-// LevelWriteSyncer 适配 zap 的 WriteSyncer
-type LevelWriteSyncer struct {
-	writer  *LevelWriter
-	level   string
+// WriteSyncer 适配 zap 的 WriteSyncer
+type WriteSyncer struct {
+	writer  *FileWriter
 	console bool
 	mu      sync.Mutex
 }
 
-func NewLevelWriteSyncer(writer *LevelWriter, level string, console bool) *LevelWriteSyncer {
-	return &LevelWriteSyncer{
+func NewWriteSyncer(writer *FileWriter, console bool) *WriteSyncer {
+	return &WriteSyncer{
 		writer:  writer,
-		level:   level,
 		console: console,
 	}
 }
 
-func (s *LevelWriteSyncer) Write(p []byte) (n int, err error) {
+func (s *WriteSyncer) Write(p []byte) (n int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 写入对应级别的文件
-	n, err = s.writer.Write(s.level, p)
+	// 写入文件
+	n, err = s.writer.Write(p)
 	if err != nil {
 		return n, err
 	}
@@ -174,58 +131,65 @@ func (s *LevelWriteSyncer) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (s *LevelWriteSyncer) Sync() error {
+func (s *WriteSyncer) Sync() error {
 	return nil
 }
 
 func InitLogger(cfg config.Zap) error {
-	once.Do(func() {
-		initErr = initLoggerOnce(cfg)
-	})
-	return initErr
-}
-
-func initLoggerOnce(cfg config.Zap) error {
 	zapLevel := parseLogLevel(cfg.Level)
 	encoder := createEncoder(cfg.Format)
 
-	// 如果启用按级别分文件
-	if cfg.LevelSeparation {
-		levelWriter := NewLevelWriter(filepath.Dir(cfg.OutputPath))
-
-		// 为每个级别创建 core
-		cores := []zapcore.Core{}
-
-		levels := []string{"debug", "info", "warn", "error"}
-		for _, level := range levels {
-			levelEncoder := createEncoder(cfg.Format)
-			levelSyncer := NewLevelWriteSyncer(levelWriter, level, cfg.LogInConsole && level == "info")
-
-			var levelCore zapcore.Core
-			switch level {
-			case "debug":
-				levelCore = zapcore.NewCore(levelEncoder, levelSyncer, zapcore.DebugLevel)
-			case "info":
-				levelCore = zapcore.NewCore(levelEncoder, levelSyncer, zapcore.InfoLevel)
-			case "warn":
-				levelCore = zapcore.NewCore(levelEncoder, levelSyncer, zapcore.WarnLevel)
-			case "error":
-				levelCore = zapcore.NewCore(levelEncoder, levelSyncer, zapcore.ErrorLevel)
-			}
-
-			cores = append(cores, levelCore)
-		}
-
-		// 创建多 core
-		core := zapcore.NewTee(cores...)
-		Logger = zap.New(core, zap.AddCaller())
-	} else {
-		// 原有的逻辑
+	// 注意：当 rotate-by-date 为 false 时，level-separation 无论是什么值都会失效
+	// 这意味着如果不需要按日期分割，那么按级别分离也会失效，使用单一的日志文件
+	if !cfg.RotateByDate {
+		// 不启用日期分割，使用单一文件模式
 		writeSyncer := createWriteSyncer(cfg)
 		core := zapcore.NewCore(encoder, writeSyncer, zapLevel)
 		Logger = zap.New(core, zap.AddCaller())
+		return nil
 	}
 
+	// 启用了日期分割
+	if cfg.LevelSeparation {
+		// 同时启用日期分割和级别分离
+		return initLevelSeparationLogger(cfg, zapLevel, encoder)
+	} else {
+		// 只启用日期分割，不启用级别分离
+		writeSyncer := createWriteSyncer(cfg)
+		core := zapcore.NewCore(encoder, writeSyncer, zapLevel)
+		Logger = zap.New(core, zap.AddCaller())
+		return nil
+	}
+}
+
+// initLevelSeparationLogger 初始化按级别分离的日志器
+func initLevelSeparationLogger(cfg config.Zap, zapLevel zapcore.Level, encoder zapcore.Encoder) error {
+	// 为每个级别创建 core
+	var cores []zapcore.Core
+	levels := []string{"debug", "info", "warn", "error"}
+
+	for _, level := range levels {
+		levelWriter := NewFileWriter(cfg.OutputPath, level, cfg.RotateByDate, cfg.LevelSeparation)
+		levelSyncer := NewWriteSyncer(levelWriter, cfg.LogInConsole && level == "info")
+
+		var levelCore zapcore.Core
+		switch level {
+		case "debug":
+			levelCore = zapcore.NewCore(encoder, levelSyncer, zapcore.DebugLevel)
+		case "info":
+			levelCore = zapcore.NewCore(encoder, levelSyncer, zapcore.InfoLevel)
+		case "warn":
+			levelCore = zapcore.NewCore(encoder, levelSyncer, zapcore.WarnLevel)
+		case "error":
+			levelCore = zapcore.NewCore(encoder, levelSyncer, zapcore.ErrorLevel)
+		}
+
+		cores = append(cores, levelCore)
+	}
+
+	// 创建多 core
+	core := zapcore.NewTee(cores...)
+	Logger = zap.New(core, zap.AddCaller())
 	return nil
 }
 
@@ -278,15 +242,17 @@ func createWriteSyncer(cfg config.Zap) zapcore.WriteSyncer {
 }
 
 func createFileSyncer(cfg config.Zap) zapcore.WriteSyncer {
-	if cfg.RotateByDate {
-		dateWriter := NewDateWriter(cfg.OutputPath)
-		return zapcore.AddSync(dateWriter)
-	}
-
 	if cfg.OutputPath == "stdout" {
 		return zapcore.AddSync(os.Stdout)
 	}
 
+	// 如果启用了日期分割，使用 FileWriter
+	if cfg.RotateByDate && !cfg.LevelSeparation {
+		fileWriter := NewFileWriter(cfg.OutputPath, "", cfg.RotateByDate, cfg.LevelSeparation)
+		return zapcore.AddSync(NewWriteSyncer(fileWriter, false))
+	}
+
+	// 使用 lumberjack 进行日志轮转
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   cfg.OutputPath,
 		MaxSize:    cfg.MaxSize,

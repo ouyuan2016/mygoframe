@@ -46,7 +46,7 @@ func main() {
 
 	// 测试错误链
 	err := &TestError{code: "VALIDATION_FAILED", message: "参数验证失败"}
-	logger.Error("业务处理失败", logger.Err(err), zap.String("request_id", "req_001"))
+	logger.Error("业务处理失败", zap.Error(err), zap.String("request_id", "req_001"))
 
 	// 测试批量日志
 	for i := 0; i < 5; i++ {

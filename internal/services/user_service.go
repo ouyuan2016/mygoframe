@@ -271,7 +271,7 @@ func (s *userService) SendEmailCode(ctx context.Context, req dto.SendEmailCodeRe
 
 	// 将验证码存储到本地缓存中，有效期5分钟
 	cacheKey := fmt.Sprintf("email_code:%s", req.Email)
-	localCache := cache.Local()
+	localCache := cache.Redis()
 	if localCache == nil {
 		return nil, fmt.Errorf("本地缓存未初始化")
 	}
@@ -294,7 +294,7 @@ func (s *userService) VerifyEmailCode(ctx context.Context, req dto.VerifyEmailCo
 	cacheKey := fmt.Sprintf("email_code:%s", req.Email)
 
 	// 从本地缓存中获取验证码
-	localCache := cache.Local()
+	localCache := cache.Redis()
 	if localCache == nil {
 		return nil, fmt.Errorf("本地缓存未初始化")
 	}

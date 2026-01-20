@@ -7,6 +7,7 @@ import (
 	"mygoframe/pkg/utils"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // JWTAuth JWT认证中间件
@@ -31,7 +32,7 @@ func JWTAuth() gin.HandlerFunc {
 		// 获取JWT工具实例
 		jwtUtil, err := utils.GetJWTUtil()
 		if err != nil {
-			logger.Error("JWT工具初始化失败", logger.Err(err))
+			logger.Error("JWT工具初始化失败", zap.Error(err))
 			utils.ServerError(c, "Authentication service error")
 			c.Abort()
 			return
