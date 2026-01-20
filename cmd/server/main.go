@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"mygoframe/internal/models"
 	"mygoframe/internal/task"
 	"mygoframe/pkg/cache"
 	"mygoframe/pkg/config"
@@ -40,6 +41,13 @@ func Run() {
 	db, err := database.InitDB(cfg)
 	if err != nil {
 		log.Fatalf("初始化数据库失败: %v", err)
+	}
+
+	// 自动迁移
+	if !cfg.System.DisableAutoMigrate {
+		if err := db.AutoMigrate(&models.News{}, &models.User{}); err != nil {
+			log.Fatalf("数据库迁移失败: %v", err)
+		}
 	}
 
 	// 初始化队列

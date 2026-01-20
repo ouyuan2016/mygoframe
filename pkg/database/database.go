@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"mygoframe/internal/models"
 	"mygoframe/pkg/config"
 
 	"gorm.io/driver/mysql"
@@ -77,13 +76,6 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	databaseConfig := cfg.GetDatabaseConfig()
 	sqlDB.SetMaxIdleConns(databaseConfig.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(databaseConfig.MaxOpenConns)
-
-	// 自动迁移
-	if !cfg.System.DisableAutoMigrate {
-		if err := db.AutoMigrate(&models.News{}, &models.User{}); err != nil {
-			return nil, fmt.Errorf("数据库迁移失败: %v", err)
-		}
-	}
 
 	return db, nil
 }
