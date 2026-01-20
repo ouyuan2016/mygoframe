@@ -23,3 +23,7 @@ type User struct {
 func (User) TableName() string {
 	return "users"
 }
+
+func (u *User) IsActive() bool {
+	return u.Status == "active"
+}

@@ -26,14 +26,16 @@ func NewManager(cfg *config.Config) *Manager {
 
 // GetStore 获取指定名称的缓存存储
 func (m *Manager) GetStore(name string) Repository {
+	return m.Store(name)
+}
+
+// Store 获取指定名称的缓存存储（合并实现）
+func (m *Manager) Store(name string) Repository {
 	if store, exists := m.stores[name]; exists {
 		return store
 	}
-	// 如果指定的存储不存在，返回本地缓存
-	if localStore, exists := m.stores["local"]; exists {
-		return localStore
-	}
-	return nil
+	// 回退到本地缓存
+	return m.stores["local"]
 }
 
 func (m *Manager) Init() error {
@@ -78,13 +80,6 @@ func (m *Manager) Has(ctx context.Context, key string) (bool, error) {
 
 func (m *Manager) Flush(ctx context.Context) error {
 	return m.Store(m.defaultStore).Flush(ctx)
-}
-
-func (m *Manager) Store(name string) Repository {
-	if store, exists := m.stores[name]; exists {
-		return store
-	}
-	return m.stores["local"]
 }
 
 func (m *Manager) PutObject(ctx context.Context, key string, obj interface{}, ttl time.Duration) error {

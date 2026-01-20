@@ -10,8 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var globalStore Cache
-var globalManager *Manager
+var globalStore *Manager
 
 func Init(cfg *config.Config) error {
 	manager := NewManager(cfg)
@@ -19,8 +18,7 @@ func Init(cfg *config.Config) error {
 		return err
 	}
 
-	globalManager = manager
-	globalStore = Cache(manager)
+	globalStore = manager
 	return nil
 }
 
@@ -31,61 +29,68 @@ func Close() error {
 	return nil
 }
 
-func Get(ctx context.Context, key string) (string, error) {
+func ensureInitialized() error {
 	if globalStore == nil {
-		return "", errors.New("缓存系统未初始化")
+		return errors.New("缓存系统未初始化")
+	}
+	return nil
+}
+
+func Get(ctx context.Context, key string) (string, error) {
+	if err := ensureInitialized(); err != nil {
+		return "", err
 	}
 	return globalStore.Get(ctx, key)
 }
 
 func Put(ctx context.Context, key string, value string, ttl time.Duration) error {
-	if globalStore == nil {
-		return errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return err
 	}
 	return globalStore.Put(ctx, key, value, ttl)
 }
 
 func Forget(ctx context.Context, key string) error {
-	if globalStore == nil {
-		return errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return err
 	}
 	return globalStore.Forget(ctx, key)
 }
 
 func Has(ctx context.Context, key string) (bool, error) {
-	if globalStore == nil {
-		return false, errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return false, err
 	}
 	return globalStore.Has(ctx, key)
 }
 
 func Flush(ctx context.Context) error {
-	if globalStore == nil {
-		return errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return err
 	}
 	return globalStore.Flush(ctx)
 }
 
 func PutObject(ctx context.Context, key string, obj interface{}, ttl time.Duration) error {
-	if globalStore == nil {
-		return errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return err
 	}
 	return globalStore.PutObject(ctx, key, obj, ttl)
 }
 
 func GetObject(ctx context.Context, key string, obj interface{}) error {
-	if globalStore == nil {
-		return errors.New("缓存系统未初始化")
+	if err := ensureInitialized(); err != nil {
+		return err
 	}
 	return globalStore.GetObject(ctx, key, obj)
 }
 
 // Store 获取指定名称的缓存存储
 func Store(storeName string) Repository {
-	if globalManager == nil {
+	if globalStore == nil {
 		return nil
 	}
-	return globalManager.GetStore(storeName)
+	return globalStore.Store(storeName)
 }
 
 // Local 获取本地缓存存储

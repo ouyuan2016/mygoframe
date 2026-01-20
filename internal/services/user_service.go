@@ -80,8 +80,8 @@ func (s *userService) Login(ctx context.Context, req dto.UserLoginRequest) (*dto
 		return nil, errors.New("用户不存在")
 	}
 
-	if user.Status != "active" {
-		return nil, errors.New("用户状态异常")
+	if !user.IsActive() {
+		return nil, errors.New("用户已被禁用")
 	}
 
 	if !s.verifyPassword(req.Password, user.Password) {
