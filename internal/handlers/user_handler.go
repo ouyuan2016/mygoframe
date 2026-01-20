@@ -66,6 +66,40 @@ func (h *UserHandler) Login(c *gin.Context) {
 	utils.Success(c, resp)
 }
 
+// SendEmailCode 发送邮箱验证码
+func (h *UserHandler) SendEmailCode(c *gin.Context) {
+	var req dto.SendEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "参数验证失败")
+		return
+	}
+
+	resp, err := h.userService.SendEmailCode(c, req)
+	if err != nil {
+		utils.ServerError(c, "发送验证码失败: "+err.Error())
+		return
+	}
+
+	utils.Success(c, resp)
+}
+
+// VerifyEmailCode 验证邮箱验证码
+func (h *UserHandler) VerifyEmailCode(c *gin.Context) {
+	var req dto.VerifyEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "参数验证失败")
+		return
+	}
+
+	resp, err := h.userService.VerifyEmailCode(c, req)
+	if err != nil {
+		utils.ServerError(c, "验证验证码失败: "+err.Error())
+		return
+	}
+
+	utils.Success(c, resp)
+}
+
 // RefreshToken 刷新访问令牌
 func (h *UserHandler) RefreshToken(c *gin.Context) {
 	refreshToken := c.GetHeader("Authorization")
@@ -138,4 +172,38 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	}
 
 	utils.Success(c, response)
+}
+
+// SendSMSCode 发送短信验证码
+func (h *UserHandler) SendSMSCode(c *gin.Context) {
+	var req dto.SendSMSCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "参数验证失败")
+		return
+	}
+
+	resp, err := h.userService.SendSMSCode(c, req)
+	if err != nil {
+		utils.ServerError(c, "发送验证码失败: "+err.Error())
+		return
+	}
+
+	utils.Success(c, resp)
+}
+
+// VerifySMSCode 验证短信验证码
+func (h *UserHandler) VerifySMSCode(c *gin.Context) {
+	var req dto.VerifySMSCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, "参数验证失败")
+		return
+	}
+
+	resp, err := h.userService.VerifySMSCode(c, req)
+	if err != nil {
+		utils.ServerError(c, "验证验证码失败: "+err.Error())
+		return
+	}
+
+	utils.Success(c, resp)
 }

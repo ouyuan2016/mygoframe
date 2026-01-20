@@ -48,3 +48,49 @@ type RefreshTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
 }
+
+// SendSMSCodeRequest 发送短信验证码请求
+type SendSMSCodeRequest struct {
+	Phone string `json:"phone" binding:"required,min=11,max=11"`
+}
+
+// SendSMSCodeResponse 发送短信验证码响应
+type SendSMSCodeResponse struct {
+	Message   string `json:"message"`
+	ExpiredAt int64  `json:"expired_at"`
+}
+
+// VerifySMSCodeRequest 验证短信验证码请求
+type VerifySMSCodeRequest struct {
+	Phone string `json:"phone" binding:"required,min=11,max=11"`
+	Code  string `json:"code" binding:"required,min=4,max=6"`
+}
+
+// VerifySMSCodeResponse 验证短信验证码响应
+type VerifySMSCodeResponse struct {
+	Valid   bool   `json:"valid"`
+	Message string `json:"message"`
+}
+
+// SendEmailCodeRequest 发送邮箱验证码请求
+type SendEmailCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// SendEmailCodeResponse 发送邮箱验证码响应
+type SendEmailCodeResponse struct {
+	Message   string `json:"message"`
+	ExpiredAt int64  `json:"expired_at"`
+}
+
+// VerifyEmailCodeRequest 验证邮箱验证码请求
+type VerifyEmailCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Code  string `json:"code" binding:"required,min=4,max=6"`
+}
+
+// VerifyEmailCodeResponse 验证邮箱验证码响应
+type VerifyEmailCodeResponse struct {
+	Valid   bool   `json:"valid"`
+	Message string `json:"message"`
+}

@@ -10,12 +10,14 @@ import (
 )
 
 type Config struct {
-	System   System   `mapstructure:"system"`
-	MySQL    Database `mapstructure:"mysql"`
-	Postgres Database `mapstructure:"pgsql"`
-	SQLite   Database `mapstructure:"sqlite"`
-	Zap      Zap      `mapstructure:"zap"`
-	JWT      JWT      `mapstructure:"jwt"`
+	System     System     `mapstructure:"system"`
+	MySQL      Database   `mapstructure:"mysql"`
+	Postgres   Database   `mapstructure:"pgsql"`
+	SQLite     Database   `mapstructure:"sqlite"`
+	Zap        Zap        `mapstructure:"zap"`
+	JWT        JWT        `mapstructure:"jwt"`
+	Redis      Redis      `mapstructure:"redis"`       // 新增 Redis 配置
+	LocalCache LocalCache `mapstructure:"local-cache"` // 本地缓存配置
 }
 
 type System struct {
@@ -71,6 +73,28 @@ type JWT struct {
 	Issuer             string `mapstructure:"issuer"`
 	PrivateKeyPath     string `mapstructure:"private-key-path"`
 	PublicKeyPath      string `mapstructure:"public-key-path"`
+}
+
+// Redis Redis配置
+type Redis struct {
+	Enabled      bool   `mapstructure:"enabled"` // 是否启用Redis
+	Host         string `mapstructure:"host"`
+	Port         string `mapstructure:"port"`
+	Password     string `mapstructure:"password"`
+	DB           int    `mapstructure:"db"`
+	PoolSize     int    `mapstructure:"pool-size"`
+	MinIdleConns int    `mapstructure:"min-idle-conns"`
+	MaxRetries   int    `mapstructure:"max-retries"`
+	DialTimeout  int    `mapstructure:"dial-timeout"`
+	ReadTimeout  int    `mapstructure:"read-timeout"`
+	WriteTimeout int    `mapstructure:"write-timeout"`
+	Prefix       string `mapstructure:"prefix"` // Redis缓存前缀
+}
+
+// LocalCache 本地缓存配置
+type LocalCache struct {
+	MaxCost int64 `mapstructure:"max-cost"` // 本地缓存最大容量(字节)
+	MaxKeys int64 `mapstructure:"max-keys"` // 本地缓存最大key数量
 }
 
 func GetBuildMode() string {

@@ -10,10 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"mygoframe/pkg/cache"
 	"mygoframe/pkg/config"
 	"mygoframe/pkg/database"
 	"mygoframe/pkg/logger"
 	"mygoframe/routes"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -25,6 +28,11 @@ func Run() {
 
 	if err := logger.InitLogger(cfg.Zap); err != nil {
 		log.Fatalf("初始化日志失败: %v", err)
+	}
+
+	// 初始化缓存系统
+	if err := cache.Init(cfg); err != nil {
+		logger.Error("初始化缓存失败", zap.Error(err))
 	}
 
 	db, err := database.InitDB(cfg)
@@ -57,6 +65,10 @@ func Run() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("服务器关闭失败: %v", err)
+	}
+
+	if err := cache.Close(); err != nil {
+		logger.Error("关闭缓存系统失败", zap.Error(err))
 	}
 
 	log.Println("服务器已关闭")

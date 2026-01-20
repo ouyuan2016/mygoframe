@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
-
+	"math/rand"
 	"mygoframe/internal/dto"
 	"mygoframe/internal/models"
 	"mygoframe/internal/repositories"
-	"mygoframe/pkg/config"
+	"mygoframe/pkg/cache"
 	"mygoframe/pkg/utils"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -24,23 +24,24 @@ type UserService interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*dto.RefreshTokenResponse, error)
 	Logout(ctx context.Context, accessToken string) error
 	GetUserByID(ctx context.Context, id string) (*models.User, error)
+	SendSMSCode(ctx context.Context, req dto.SendSMSCodeRequest) (*dto.SendSMSCodeResponse, error)
+	VerifySMSCode(ctx context.Context, req dto.VerifySMSCodeRequest) (*dto.VerifySMSCodeResponse, error)
+	SendEmailCode(ctx context.Context, req dto.SendEmailCodeRequest) (*dto.SendEmailCodeResponse, error)
+	VerifyEmailCode(ctx context.Context, req dto.VerifyEmailCodeRequest) (*dto.VerifyEmailCodeResponse, error)
 }
 
 // userService 用户服务实现
 type userService struct {
 	userRepo repositories.UserRepository
 	jwtUtil  *utils.JWTUtil
-	config   *config.Config
 }
 
 // NewUserService 创建用户服务实例
 func NewUserService(db *gorm.DB) UserService {
 	jwtUtil, _ := utils.GetJWTUtil()
-	cfg := config.GetConfig()
 	return &userService{
 		userRepo: repositories.NewUserRepository(db),
 		jwtUtil:  jwtUtil,
-		config:   cfg,
 	}
 }
 
@@ -87,7 +88,7 @@ func (s *userService) Login(ctx context.Context, req dto.UserLoginRequest) (*dto
 		return nil, errors.New("密码错误")
 	}
 
-	accessToken, err := s.jwtUtil.GenerateToken(utils.UserInfo{
+	accessToken, expiresIn, err := s.jwtUtil.GenerateToken(utils.UserInfo{
 		Id:          user.ID,
 		DisplayName: user.Name,
 		Email:       user.Email,
@@ -97,14 +98,7 @@ func (s *userService) Login(ctx context.Context, req dto.UserLoginRequest) (*dto
 		return nil, fmt.Errorf("生成访问令牌失败: %w", err)
 	}
 
-	refreshToken, err := s.jwtUtil.GenerateTokenWithExpire(
-		user.ID,
-		user.Name,
-		user.Email,
-		"",
-		user.Avatar,
-		time.Now().Add(7*24*time.Hour),
-	)
+	refreshToken, err := s.jwtUtil.GenerateRefreshToken(user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("生成刷新令牌失败: %w", err)
 	}
@@ -120,7 +114,7 @@ func (s *userService) Login(ctx context.Context, req dto.UserLoginRequest) (*dto
 		},
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    s.config.JWT.AccessTokenExpire * 60,
+		ExpiresIn:    expiresIn,
 	}, nil
 }
 
@@ -143,7 +137,7 @@ func (s *userService) RefreshToken(ctx context.Context, refreshToken string) (*d
 		return nil, errors.New("用户状态异常")
 	}
 
-	accessToken, err := s.jwtUtil.GenerateToken(utils.UserInfo{
+	accessToken, expiresIn, err := s.jwtUtil.GenerateToken(utils.UserInfo{
 		Id:          user.ID,
 		DisplayName: user.Name,
 		Email:       user.Email,
@@ -155,7 +149,7 @@ func (s *userService) RefreshToken(ctx context.Context, refreshToken string) (*d
 
 	return &dto.RefreshTokenResponse{
 		AccessToken: accessToken,
-		ExpiresIn:   s.config.JWT.AccessTokenExpire,
+		ExpiresIn:   expiresIn,
 	}, nil
 }
 
@@ -172,6 +166,134 @@ func (s *userService) Logout(ctx context.Context, accessToken string) error {
 // GetUserByID 根据ID获取用户信息
 func (s *userService) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	return s.userRepo.FindByID(ctx, id)
+}
+
+// SendSMSCode 发送短信验证码
+func (s *userService) SendSMSCode(ctx context.Context, req dto.SendSMSCodeRequest) (*dto.SendSMSCodeResponse, error) {
+	// 生成6位随机验证码
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+
+	// 模拟发送短信（实际项目中这里调用短信服务商API）
+	// 这里只是记录日志，表示"发送"了验证码
+	fmt.Printf("模拟发送短信验证码到 %s: %s\n", req.Phone, code)
+
+	// 将验证码存储到本地缓存中，有效期5分钟
+	cacheKey := fmt.Sprintf("sms_code:%s", req.Phone)
+	localCache := cache.Local()
+	if localCache == nil {
+		return nil, fmt.Errorf("本地缓存未初始化")
+	}
+
+	err := localCache.Put(ctx, cacheKey, code, 5*time.Minute)
+	if err != nil {
+		return nil, fmt.Errorf("存储验证码失败: %w", err)
+	}
+
+	expiredAt := time.Now().Add(5 * time.Minute).Unix()
+
+	return &dto.SendSMSCodeResponse{
+		Message:   "验证码发送成功",
+		ExpiredAt: expiredAt,
+	}, nil
+}
+
+// VerifySMSCode 验证短信验证码
+func (s *userService) VerifySMSCode(ctx context.Context, req dto.VerifySMSCodeRequest) (*dto.VerifySMSCodeResponse, error) {
+	cacheKey := fmt.Sprintf("sms_code:%s", req.Phone)
+
+	// 从本地缓存中获取验证码
+	localCache := cache.Local()
+	if localCache == nil {
+		return nil, fmt.Errorf("本地缓存未初始化")
+	}
+
+	storedCode, err := localCache.Get(ctx, cacheKey)
+	if err != nil {
+		return &dto.VerifySMSCodeResponse{
+			Valid:   false,
+			Message: "验证码已过期或不存在",
+		}, nil
+	}
+
+	// 验证验证码是否正确
+	if storedCode != req.Code {
+		return &dto.VerifySMSCodeResponse{
+			Valid:   false,
+			Message: "验证码错误",
+		}, nil
+	}
+
+	// 验证成功后删除验证码（防止重复使用）
+	localCache.Forget(ctx, cacheKey)
+
+	return &dto.VerifySMSCodeResponse{
+		Valid:   true,
+		Message: "验证码正确",
+	}, nil
+}
+
+// SendEmailCode 发送邮箱验证码
+func (s *userService) SendEmailCode(ctx context.Context, req dto.SendEmailCodeRequest) (*dto.SendEmailCodeResponse, error) {
+	// 生成6位随机验证码
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+
+	// 模拟发送邮件（实际项目中这里调用邮件服务商API）
+	// 这里只是记录日志，表示"发送"了验证码
+	fmt.Printf("模拟发送邮箱验证码到 %s: %s\n", req.Email, code)
+
+	// 将验证码存储到本地缓存中，有效期5分钟
+	cacheKey := fmt.Sprintf("email_code:%s", req.Email)
+	localCache := cache.Local()
+	if localCache == nil {
+		return nil, fmt.Errorf("本地缓存未初始化")
+	}
+
+	err := localCache.Put(ctx, cacheKey, code, 5*time.Minute)
+	if err != nil {
+		return nil, fmt.Errorf("存储验证码失败: %w", err)
+	}
+
+	expiredAt := time.Now().Add(5 * time.Minute).Unix()
+
+	return &dto.SendEmailCodeResponse{
+		Message:   "验证码发送成功",
+		ExpiredAt: expiredAt,
+	}, nil
+}
+
+// VerifyEmailCode 验证邮箱验证码
+func (s *userService) VerifyEmailCode(ctx context.Context, req dto.VerifyEmailCodeRequest) (*dto.VerifyEmailCodeResponse, error) {
+	cacheKey := fmt.Sprintf("email_code:%s", req.Email)
+
+	// 从本地缓存中获取验证码
+	localCache := cache.Local()
+	if localCache == nil {
+		return nil, fmt.Errorf("本地缓存未初始化")
+	}
+
+	storedCode, err := localCache.Get(ctx, cacheKey)
+	if err != nil {
+		return &dto.VerifyEmailCodeResponse{
+			Valid:   false,
+			Message: "验证码已过期或不存在",
+		}, nil
+	}
+
+	// 验证验证码是否正确
+	if storedCode != req.Code {
+		return &dto.VerifyEmailCodeResponse{
+			Valid:   false,
+			Message: "验证码错误",
+		}, nil
+	}
+
+	// 验证成功后删除验证码（防止重复使用）
+	localCache.Forget(ctx, cacheKey)
+
+	return &dto.VerifyEmailCodeResponse{
+		Valid:   true,
+		Message: "验证码正确",
+	}, nil
 }
 
 // hashPassword 密码加密

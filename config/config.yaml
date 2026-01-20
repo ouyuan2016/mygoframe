@@ -17,6 +17,27 @@ mysql:
   # true 写入日志文件
   log-zap: false
 
+# 本地缓存配置
+local-cache:
+  max-cost: 1073741824  # 本地缓存最大容量(字节), 默认1GB
+  max-keys: 1000000     # 本地缓存最大key数量, 默认100万
+
+# Redis配置
+redis:
+  enabled: true   # 是否启用Redis
+  host: "localhost"
+  port: "6379"
+  password: ""  # Redis密码，如果没有密码留空
+  db: 0         # 数据库编号
+  pool-size: 10 # 连接池大小
+  min-idle-conns: 2 # 最小空闲连接数
+  max-retries: 3    # 最大重试次数
+  dial-timeout: 5   # 连接超时时间(秒)
+  read-timeout: 3   # 读取超时时间(秒)
+  write-timeout: 3  # 写入超时时间(秒)
+  prefix: "app:"    # Redis缓存前缀
+
+# zap日志配置
 zap:
   level: "info"
   format: "console"
@@ -31,9 +52,9 @@ zap:
 
 jwt:
   signing-method: "HS512"
-  # 单位分钟
-  access-token-expire: 1
-  refresh-token-expire: 86400
+  # 单位分钟 10080分钟=7天 302400分钟=30天
+  access-token-expire: 10080
+  refresh-token-expire: 302400
   # issuer 签发域名确保令牌的安全性
   issuer: "http://127.0.0.1"
   # secret-key用于HS256/HS384/HS512签名方法 32位随机字符串

@@ -18,6 +18,7 @@ var Logger *zap.Logger
 var once sync.Once
 var initErr error
 
+// DateWriter 按日期写入器
 type DateWriter struct {
 	basePath    string
 	currentDate string
@@ -297,6 +298,7 @@ func createFileSyncer(cfg config.Zap) zapcore.WriteSyncer {
 	return zapcore.AddSync(lumberJackLogger)
 }
 
+// 核心日志函数
 func Sync() {
 	if Logger != nil {
 		Logger.Sync()
@@ -329,4 +331,9 @@ func Debug(msg string, fields ...zap.Field) {
 
 func Err(err error) zap.Field {
 	return zap.Error(err)
+}
+
+// Any 添加任意类型的字段
+func Any(key string, value interface{}) zap.Field {
+	return zap.Any(key, value)
 }

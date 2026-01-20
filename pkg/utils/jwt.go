@@ -84,28 +84,8 @@ func GetJWTUtil() (*JWTUtil, error) {
 	return jwtUtil, nil
 }
 
-func (j *JWTUtil) GenerateToken(userInfo UserInfo) (string, error) {
-	if userInfo.Email == "" {
-		return "", errors.New("邮箱不能为空")
-	}
-
-	if j.config.AccessTokenExpire <= 0 {
-		return "", errors.New("访问令牌过期时间必须大于0")
-	}
-
-	// 将分钟转换为秒
-	expireTime := time.Now().Add(time.Duration(j.config.AccessTokenExpire) * time.Minute)
-
-	claims := Claims{
-		UserInfo: &userInfo,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expireTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    j.config.Issuer,
-		},
-	}
-
+// generateTokenInternal 内部通用的令牌生成方法
+func (j *JWTUtil) generateTokenInternal(claims Claims, tokenType string) (string, error) {
 	var signingMethod jwt.SigningMethod
 	switch strings.ToUpper(j.config.SigningMethod) {
 	case "HS256":
@@ -143,10 +123,76 @@ func (j *JWTUtil) GenerateToken(userInfo UserInfo) (string, error) {
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("生成令牌失败: %w", err)
+		return "", fmt.Errorf("生成%s失败: %w", tokenType, err)
 	}
 
 	return tokenString, nil
+}
+
+// GenerateToken 生成访问令牌，返回令牌和过期时间（秒）
+func (j *JWTUtil) GenerateToken(userInfo UserInfo) (string, int, error) {
+	if j.config.AccessTokenExpire <= 0 {
+		return "", 0, errors.New("访问令牌过期时间必须大于0")
+	}
+
+	// 将分钟转换为秒
+	expiresIn := j.config.AccessTokenExpire * 60 // 转换为秒
+	expireTime := time.Now().Add(time.Duration(j.config.AccessTokenExpire) * time.Minute)
+
+	tokenString, err := j.GenerateTokenWithExpire(
+		userInfo.Id,
+		userInfo.DisplayName,
+		userInfo.Email,
+		userInfo.Phone,
+		userInfo.Avatar,
+		expireTime,
+	)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return tokenString, expiresIn, nil
+}
+
+// GenerateRefreshToken 生成刷新令牌（使用配置的过期时间，只需要用户ID）
+func (j *JWTUtil) GenerateRefreshToken(userId string) (string, error) {
+	if j.config.RefreshTokenExpire <= 0 {
+		return "", errors.New("刷新令牌过期时间必须大于0")
+	}
+	// 将分钟转换为秒
+	expireTime := time.Now().Add(time.Duration(j.config.RefreshTokenExpire) * time.Minute)
+
+	// 刷新令牌只需要用户ID，其他字段留空
+	return j.GenerateTokenWithExpire(userId, "", "", "", "", expireTime)
+}
+
+// getKeyForParseToken 获取用于解析令牌的密钥
+func (j *JWTUtil) getKeyForParseToken(token *jwt.Token) (interface{}, error) {
+	actualAlg := "unknown"
+	if token.Header["alg"] != nil {
+		actualAlg = token.Header["alg"].(string)
+	}
+
+	switch strings.ToUpper(j.config.SigningMethod) {
+	case "RS256", "RS384", "RS512":
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("意外的签名方法: %s (期望: %s)", actualAlg, j.config.SigningMethod)
+		}
+		if j.publicKey == nil {
+			return nil, errors.New("RSA公钥未初始化")
+		}
+		return j.publicKey, nil
+	case "HS256", "HS384", "HS512":
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("意外的签名方法: %s (期望: %s)", actualAlg, j.config.SigningMethod)
+		}
+		if j.config.SecretKey == "" {
+			return nil, errors.New("HMAC密钥未配置")
+		}
+		return []byte(j.config.SecretKey), nil
+	default:
+		return nil, fmt.Errorf("不支持的签名方法: %s", j.config.SigningMethod)
+	}
 }
 
 func (j *JWTUtil) ParseToken(tokenString string) (*Claims, error) {
@@ -154,36 +200,7 @@ func (j *JWTUtil) ParseToken(tokenString string) (*Claims, error) {
 		return nil, errors.New("令牌字符串不能为空")
 	}
 
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		switch strings.ToUpper(j.config.SigningMethod) {
-		case "RS256", "RS384", "RS512":
-			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-				alg := "unknown"
-				if token.Header["alg"] != nil {
-					alg = token.Header["alg"].(string)
-				}
-				return nil, fmt.Errorf("意外的签名方法: %s (期望: %s)", alg, j.config.SigningMethod)
-			}
-			if j.publicKey == nil {
-				return nil, errors.New("RSA公钥未初始化")
-			}
-			return j.publicKey, nil
-		case "HS256", "HS384", "HS512":
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				alg := "unknown"
-				if token.Header["alg"] != nil {
-					alg = token.Header["alg"].(string)
-				}
-				return nil, fmt.Errorf("意外的签名方法: %s (期望: %s)", alg, j.config.SigningMethod)
-			}
-			if j.config.SecretKey == "" {
-				return nil, errors.New("HMAC密钥未配置")
-			}
-			return []byte(j.config.SecretKey), nil
-		default:
-			return nil, fmt.Errorf("不支持的签名方法: %s", j.config.SigningMethod)
-		}
-	})
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, j.getKeyForParseToken)
 
 	if err != nil {
 		return nil, fmt.Errorf("解析令牌失败: %w", err)
@@ -223,64 +240,73 @@ func (j *JWTUtil) parseRSAKeys() error {
 	return nil
 }
 
+// validateFileExists 验证文件是否存在
+func (j *JWTUtil) validateFileExists(filePath, fileType string) error {
+	if filePath == "" {
+		return nil
+	}
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("%s文件不存在: %s", fileType, filePath)
+	}
+	return nil
+}
+
 func (j *JWTUtil) validateRSAConfig() error {
 	if j.config.PrivateKeyPath == "" && j.config.PublicKeyPath == "" {
 		return errors.New("RSA算法需要配置密钥，请提供私钥和公钥文件路径")
 	}
 
-	if j.config.PrivateKeyPath != "" {
-		if _, err := os.Stat(j.config.PrivateKeyPath); os.IsNotExist(err) {
-			return errors.New("私钥文件不存在: " + j.config.PrivateKeyPath)
-		}
+	if err := j.validateFileExists(j.config.PrivateKeyPath, "私钥"); err != nil {
+		return err
 	}
 
-	if j.config.PublicKeyPath != "" {
-		if _, err := os.Stat(j.config.PublicKeyPath); os.IsNotExist(err) {
-			return errors.New("公钥文件不存在: " + j.config.PublicKeyPath)
-		}
+	if err := j.validateFileExists(j.config.PublicKeyPath, "公钥"); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (j *JWTUtil) parsePrivateKey() error {
-	if j.config.PrivateKeyPath == "" {
-		return nil
+// parseRSAKeyFromFile 从文件解析RSA密钥
+func (j *JWTUtil) parseRSAKeyFromFile(filePath string, isPrivateKey bool) (interface{}, error) {
+	if filePath == "" {
+		return nil, nil
 	}
 
-	privateKeyData, err := os.ReadFile(j.config.PrivateKeyPath)
+	keyData, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("读取私钥文件失败 [%s]: %w", j.config.PrivateKeyPath, err)
+		return nil, fmt.Errorf("读取%s文件失败 [%s]: %w", map[bool]string{true: "私钥", false: "公钥"}[isPrivateKey], filePath, err)
 	}
 
-	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privateKeyData)
+	if isPrivateKey {
+		return jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	}
+	return jwt.ParseRSAPublicKeyFromPEM(keyData)
+}
+
+func (j *JWTUtil) parsePrivateKey() error {
+	privateKey, err := j.parseRSAKeyFromFile(j.config.PrivateKeyPath, true)
 	if err != nil {
 		return fmt.Errorf("解析私钥失败: %w", err)
 	}
-
-	j.privateKey = privateKey
+	if privateKey != nil {
+		j.privateKey = privateKey.(*rsa.PrivateKey)
+	}
 	return nil
 }
 
 func (j *JWTUtil) parsePublicKey() error {
-	if j.config.PublicKeyPath == "" {
-		return nil
-	}
-
-	publicKeyData, err := os.ReadFile(j.config.PublicKeyPath)
-	if err != nil {
-		return fmt.Errorf("读取公钥文件失败 [%s]: %w", j.config.PublicKeyPath, err)
-	}
-
-	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicKeyData)
+	publicKey, err := j.parseRSAKeyFromFile(j.config.PublicKeyPath, false)
 	if err != nil {
 		return fmt.Errorf("解析公钥失败: %w", err)
 	}
-
-	j.publicKey = publicKey
+	if publicKey != nil {
+		j.publicKey = publicKey.(*rsa.PublicKey)
+	}
 	return nil
 }
 
+// validateKeyPair 验证RSA密钥对是否匹配
 func (j *JWTUtil) validateKeyPair() error {
 	if j.privateKey == nil || j.publicKey == nil {
 		return nil
@@ -293,17 +319,17 @@ func (j *JWTUtil) validateKeyPair() error {
 
 	signature, err := rsa.SignPKCS1v15(rand.Reader, j.privateKey, crypto.SHA256, digest)
 	if err != nil {
-		return fmt.Errorf("密钥对验证失败 - 签名错误: %w", err)
+		return fmt.Errorf("密钥对验证失败: %w", err)
 	}
 
-	err = rsa.VerifyPKCS1v15(j.publicKey, crypto.SHA256, digest, signature)
-	if err != nil {
-		return fmt.Errorf("密钥对验证失败 - 公钥私钥不匹配: %w", err)
+	if err := rsa.VerifyPKCS1v15(j.publicKey, crypto.SHA256, digest, signature); err != nil {
+		return fmt.Errorf("密钥对验证失败: %w", err)
 	}
 
 	return nil
 }
 
+// GenerateTokenWithExpire 生成指定过期时间的令牌（使用完整用户信息）
 func (j *JWTUtil) GenerateTokenWithExpire(id, displayName, email, phone, avatar string, expireTime time.Time) (string, error) {
 	userInfo := UserInfo{
 		Id:          id,
@@ -312,6 +338,7 @@ func (j *JWTUtil) GenerateTokenWithExpire(id, displayName, email, phone, avatar 
 		Phone:       phone,
 		Avatar:      avatar,
 	}
+
 	claims := Claims{
 		UserInfo: &userInfo,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -322,35 +349,9 @@ func (j *JWTUtil) GenerateTokenWithExpire(id, displayName, email, phone, avatar 
 		},
 	}
 
-	var signingMethod jwt.SigningMethod
-	switch strings.ToUpper(j.config.SigningMethod) {
-	case "RS256":
-		signingMethod = jwt.SigningMethodRS256
-	case "RS384":
-		signingMethod = jwt.SigningMethodRS384
-	case "RS512":
-		signingMethod = jwt.SigningMethodRS512
-	default:
-		signingMethod = jwt.SigningMethodHS256
-	}
-
-	token := jwt.NewWithClaims(signingMethod, claims)
-
-	var tokenString string
-	var err error
-
-	switch strings.ToUpper(j.config.SigningMethod) {
-	case "RS256", "RS384", "RS512":
-		if j.privateKey == nil {
-			return "", errors.New("RSA私钥未配置")
-		}
-		tokenString, err = token.SignedString(j.privateKey)
-	default:
-		tokenString, err = token.SignedString([]byte(j.config.SecretKey))
-	}
-
+	tokenString, err := j.generateTokenInternal(claims, "令牌")
 	if err != nil {
-		return "", errors.New("生成令牌失败: " + err.Error())
+		return "", err
 	}
 
 	return tokenString, nil

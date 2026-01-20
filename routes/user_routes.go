@@ -17,6 +17,10 @@ func SetupUserRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		public.POST("/register", userHandler.Register)
 		public.POST("/login", userHandler.Login)
 		public.POST("/refresh-token", userHandler.RefreshToken)
+		public.POST("/send-sms-code", userHandler.SendSMSCode)         // 发送短信验证码
+		public.POST("/verify-sms-code", userHandler.VerifySMSCode)     // 验证短信验证码
+		public.POST("/send-email-code", userHandler.SendEmailCode)     // 发送邮箱验证码
+		public.POST("/verify-email-code", userHandler.VerifyEmailCode) // 验证邮箱验证码
 	}
 
 	protected := router.Group("/users")
