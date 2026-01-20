@@ -2,8 +2,6 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -21,16 +19,4 @@ type Cache interface {
 	PutObject(ctx context.Context, key string, obj interface{}, ttl time.Duration) error
 	GetObject(ctx context.Context, key string, obj interface{}) error
 	Close() error
-}
-
-func SerializeObject(obj interface{}) (string, error) {
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return "", fmt.Errorf("序列化对象失败: %w", err)
-	}
-	return string(data), nil
-}
-
-func DeserializeObject(data string, obj interface{}) error {
-	return json.Unmarshal([]byte(data), obj)
 }

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"mygoframe/pkg/config"
 	"mygoframe/pkg/logger"
@@ -126,4 +127,20 @@ func (m *Manager) Close() error {
 // Client 返回默认缓存存储的底层客户端
 func (m *Manager) Client() interface{} {
 	return m.Store(m.defaultStore).Client()
+}
+
+func SerializeObject(obj interface{}) (string, error) {
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return "", fmt.Errorf("序列化对象失败: %w", err)
+	}
+	return string(data), nil
+}
+
+func DeserializeObject(data string, obj interface{}) error {
+	// 检查数据是否为空
+	if data == "" {
+		return nil
+	}
+	return json.Unmarshal([]byte(data), obj)
 }

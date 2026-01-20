@@ -165,7 +165,35 @@ func (s *userService) Logout(ctx context.Context, accessToken string) error {
 
 // GetUserByID 根据ID获取用户信息
 func (s *userService) GetUserByID(ctx context.Context, id string) (*models.User, error) {
-	return s.userRepo.FindByID(ctx, id)
+	// 1. 先尝试从缓存获取
+	cacheKey := fmt.Sprintf("user:%s", id)
+	var user models.User
+
+	// 尝试从缓存获取用户数据
+	err := cache.GetObject(ctx, cacheKey, &user)
+	if err == nil {
+		// 缓存命中，返回用户数据
+		return &user, nil
+	}
+
+	fmt.Println("缓存未命中，从数据库获取用户: err=", err)
+
+	// 2. 缓存未命中，从数据库获取
+	dbUser, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if dbUser == nil {
+		return nil, nil
+	}
+
+	err = cache.PutObject(ctx, cacheKey, dbUser, 1*time.Minute)
+	if err != nil {
+		fmt.Println("缓存用户数据失败:", err)
+	}
+
+	fmt.Println("缓存用户数据成功")
+	return dbUser, nil
 }
 
 // SendSMSCode 发送短信验证码

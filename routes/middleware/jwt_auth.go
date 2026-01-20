@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"strings"
 
 	"mygoframe/pkg/logger"
@@ -39,7 +38,6 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		// 解析令牌
-		fmt.Println(parts[1])
 		claims, err := jwtUtil.ParseToken(parts[1])
 		if err != nil {
 			utils.Unauthorized(c, "Access token is invalid or expired: "+err.Error())
