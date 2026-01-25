@@ -1,18 +1,15 @@
 package handlers
 
 import (
-	"fmt"
 	"strings"
 
 	"mygoframe/internal/dto"
 	"mygoframe/internal/services"
 	"mygoframe/internal/task"
-	"mygoframe/pkg/queue"
 	"mygoframe/pkg/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 )
 
@@ -30,49 +27,40 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 // TestQueue 测试队列
 func (h *UserHandler) TestQueue(c *gin.Context) {
-	// 从查询参数获取队列名称，默认为 "default"  default 队列权重为 3 ，critical 队列权重为 6 low 队列权重为 1
-	queueName := c.DefaultQuery("queue", "default")
-
-	// 模拟一个用户ID
 	userID := 123
-	// 创建一个新任务
-	t, err := task.NewWelcomeEmailTask(userID)
+	queueName := "critical"
+
+	info, err := task.EnqueueWelcomeEmailTask(userID, queueName)
 	if err != nil {
-		utils.ServerError(c, "创建任务失败: "+err.Error())
+		utils.ServerError(c, "任务入队失败")
 		return
 	}
-	// 入队时指定队列
-	info, err := queue.Client.Enqueue(t, asynq.MaxRetry(3), asynq.Timeout(20*time.Minute), asynq.Queue(queueName))
-	if err != nil {
-		utils.ServerError(c, "入队失败: "+err.Error())
-		return
-	}
+
 	utils.Success(c, gin.H{
-		"task_id": info.ID,
-		"queue":   queueName,
+		"message":   "任务已成功入队",
+		"task_id":   info.ID,
+		"queue":     info.Queue,
+		"retention": info.Retention,
 	})
 }
 
-// EnqueueDelayedTask 测试延迟队列
+// EnqueueDelayedTask handles enqueuing a delayed task.
 func (h *UserHandler) EnqueueDelayedTask(c *gin.Context) {
-	// 模拟一个用户ID
 	userID := "123"
-	t, err := task.NewSendLaterEmailTask(userID, time.Now().Add(3*time.Second))
+	delay := 3 * time.Second
+
+	info, err := task.EnqueueSendLaterEmailTask(userID, delay)
 	if err != nil {
-		utils.ServerError(c, "创建任务失败: "+err.Error())
-		return
-	}
-	fmt.Println("start time:", time.Now().Format("2006-01-02 15:04:05"))
-	// Enqueue the task to be processed after the specified delay.
-	info, err := queue.Client.Enqueue(t, asynq.ProcessIn(3*time.Second))
-	if err != nil {
-		utils.ServerError(c, "入队失败: "+err.Error())
+		utils.ServerError(c, "延迟任务入队失败")
 		return
 	}
 
 	utils.Success(c, gin.H{
+		"message":    "延迟任务已成功入队",
 		"task_id":    info.ID,
-		"process_in": "3s",
+		"process_in": delay.String(),
+		"process_at": info.NextProcessAt.Format(time.RFC3339),
+		"retention":  info.Retention,
 	})
 }
 
